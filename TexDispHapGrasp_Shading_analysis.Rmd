@@ -1,0 +1,21 @@
+---
+title: "TexDispHapGrasp_Shading_analysis"
+author: "James Wilmott"
+date: "11/28/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#0.0
+
+
+
+
+
+```{r, echo=FALSE, include=FALSE, message=FALSE}
+'End of document'
+```
