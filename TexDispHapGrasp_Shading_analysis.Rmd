@@ -9,9 +9,131 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Overview of experiment
 
-#0.0
+This experiment was a haptic training task that was part of a larger study designed to assess whether cue weights are assigned according to reliabilities as per the Maximum Likelihood Estimation theoretical framework, or are otherwise assigned according to a deterministic mapping between sensory signal and depth estimation (related through a 'gain'). If cue weights are assigned according to reliabilities, then the design of this haptic training task should not elicit any changes in cue weights because there is no 'error' signal that should drive the visual system to downweight a given cue. However, if cue weights are determined according to gains as formulated by the Intrinsic Constraint model, then we should observe a decrease in texture weight with repeated exposure to this haptic training task.
 
+Below here I import and preprocess the reaching data, but do not display the code.
+
+```{r, echo=FALSE, include=FALSE}
+#initialize the environment and set parameters
+library(tidyr)
+library(broom)
+library(aod)
+library(ggplot2)
+library(lme4)
+library(dplyr)
+library(optimx)
+library(gridExtra)
+library(grid)
+library(data.table)
+library(purrr)
+
+datapath <-  '/Users/james/Documents/R/TexDispHapticGrasp-Shading/data/';  
+figsavepath <-  '/Users/james/Documents/R/TexDispHapticGrasp-Shading/figures/';
+
+ids <- c('mm','eoi','rhh','baf','at','lg'); 
+viewing_distances <- c('-420');
+
+#define a function to compute the between-participants standard error
+computeBSSEM <- function(means_vector){
+  #computes the between-subject standard error, given a vector of length (nr subjects) correponding to the means
+  grand_mean <- mean(na.omit(means_vector)); #omit the NaNs if applicable
+  err <- means_vector-grand_mean; #get the error, will be a vector
+  squared_err <- err**2; #squared error
+  non_nans <- squared_err[!(is.na(squared_err))]; #only get the values that are not NaNs
+  n <- length(non_nans);
+  MSE <- sum(non_nans) / (n-1);
+  denom <- sqrt(n);
+  estimate <- sqrt(MSE) / denom;
+  return(estimate);
+}
+
+#create empty vectors to hold the data summary data for each trial
+sids <- c(); tnrs <- c(); bnrs <- c(); GAs <- c(); depths <-c();
+
+#create empty vectors to hold the data summary data for each trial
+subids <- c(); sessionnrs <- c(); trialnrs <- c(); failcodes <- c(); texturetypes <- c(); simulateddepths <- c(); touchtimes <- c(); endtimes <- c(); starttimes <- c(); MGAs <- c(); fiveGAs <- c(); tenGAs <- c(); fifteenGAs <- c();  iterator = 1; # adjustedgrips <- c(); 
+
+for (subid in ids) {
+    #get the filenames corresponding to each session and trial for this participant
+    filenames = list.files(paste(datapath,subid,'/',sep = ""),paste(subid)); 
+    
+    #import each file
+    for (f in filenames) {
+       x <- read.table(paste(datapath,subid,'/', f, sep=""), header = TRUE, stringsAsFactors = TRUE, fill = TRUE);       #^ note that the last row will have values that are not necessarrilly arranged correctly; what should be correct is endTime in this last row
+       #now, for a given trial, get the kinematic variables of interest and populate the vectors
+       #for MGA, only get the max grip for the initial movement (e.g., until the grip aperture velocity first goes to 0), excluding corrections
+       
+       frames_occluded <- max(x$framesOccluded,na.rm=TRUE);
+       if ((frames_occluded > 20)|(max(x$handOnObj,na.rm=TRUE)==0)|(max(x$failCause,na.rm=TRUE)>0)) { #if too many samples are missing, cut this participant from analyses
+         max_GA <- NA; st <- NA; tt <- NA; et <- NA; fivemm_away_GA <- NA; tenmm_away_GA <- NA; fifteenmm_away_GA<-NA;
+         
+       } else {
+         #assign the total trial values to the appropriate vectors
+        sids <- append(sids, as.character(x$subjName)); depths <- append(depths, x$simulatedDepth);
+        tnrs <- append(tnrs, x$trialN); bnrs <- append(bnrs, x$sessionNR); GAs <- append(GAs, x$gripAperture);
+         
+         #V WILL THIS BOOLEAN CORRECTLY CUT OUT ADJUSTMENTS AT THE HAPTIC STIMULUS???????????
+         inflight <- x[x$gripApertureVel>0 & x$distFromObjVel>0 & x$handTouchObj==0,];#get indices of initial movement via boolean
+         max_GA <- max(inflight$gripAperture, na.rm = TRUE);
+         
+         #get the GA for 15, 10 and 5 mm before the thumb touches the object
+         #get the row index corresponding to the first sample were the hand is on the haptic stimulus
+         row_ <- match(1,x$handOnObj);
+         #get the thumb x,y,z at time of touch
+         thmb_x <- x$thumbXraw[row_]; thmb_y <- x$thumbYraw[row_]; thmb_z <- x$thumbZraw[row_];
+         dist <- sqrt((x$thumbXraw-thmb_x)^2 + (x$thumbYraw-thmb_y)^2 + (x$thumbZraw-thmb_z)^2)[1:row_];
+         
+         ##find the row index of the sample that is closest to 5 mm away
+         five_row <- match(min(abs(dist-5),na.rm=TRUE),abs(dist-5));
+         if (dist[five_row] == 5) { #conditional to ensure not getting the point where thumb makes contact
+           five_row = five_row -1;
+         }
+         #get grip aperture at 5 mm away
+         fivemm_away_GA <- x$gripAperture[five_row];
+
+        ##find the row index of the sample that is closest to 10 mm away
+         ten_row <- match(min(abs(dist-10),na.rm=TRUE),abs(dist-10));
+         if (dist[ten_row] == 10) { #conditional to ensure not getting the point where thumb makes contact
+           ten_row = ten_row -1;
+         }
+         #get grip aperture at 10 mm away
+         tenmm_away_GA <- x$gripAperture[ten_row]; 
+         
+        ##find the row index of the sample that is closest to 15 mm away
+         fifteen_row <- match(min(abs(dist-15),na.rm=TRUE),abs(dist-15));
+         if (dist[fifteen_row] == 15) { #conditional to ensure not getting the point where thumb makes contact
+           fifteen_row = fifteen_row -1;
+         }
+         #get grip aperture at 10 mm away
+         fifteenmm_away_GA <- x$gripAperture[fifteen_row];          
+
+         st <- max(x$startTime,na.rm = TRUE); tt <- max(x$touchTime,na.rm = TRUE); et <- max(x$endTime,na.rm = TRUE);         
+       }
+       
+
+       #populate the data arrays
+       subids[iterator] <- as.character(x$subjName[1]); sessionnrs[iterator] <- x$sessionNR[1]; trialnrs[iterator] <- x$trialN[1]; failcodes[iterator] <- max(x$failCause, na.rm = TRUE); texturetypes[iterator] <- x$textureType[1]; simulateddepths[iterator] <- x$simulatedDepth[1]; touchtimes[iterator] <- tt; endtimes[iterator] <- et; starttimes[iterator] <- st; MGAs[iterator] <- max_GA; fiveGAs[iterator] <- fivemm_away_GA; tenGAs[iterator] <- tenmm_away_GA; fifteenGAs[iterator] <- fifteenmm_away_GA; 
+       
+       iterator = iterator + 1; #iterate
+    }
+}
+
+#add the all trial data to a (massive) dataframe
+all_GA_data <- data.frame(subid = sids, sessionnr = bnrs, trialnr = tnrs, simulateddepth = depths, GA = GAs);
+
+#add the data vectors to a data frame for the summary data
+subject_data <- data.frame(subid = subids, sessionnr = sessionnrs, trialnr = trialnrs, failcode = failcodes, texturetype = texturetypes, simulateddepth = simulateddepths, touchtime = touchtimes, endtime = endtimes, starttime = starttimes, MGA = MGAs, fiveGA = fiveGAs, tenGA = tenGAs, fifteenGA = fifteenGAs);
+
+
+```
+
+#1. 
+
+```{r}
+
+```
 
 
 
