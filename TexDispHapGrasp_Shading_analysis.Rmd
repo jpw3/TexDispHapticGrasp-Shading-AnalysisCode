@@ -9,11 +9,17 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Overview of experiment
+#OVERVIEW OF EXPERIMENT
 
 This experiment was a haptic training task that was part of a larger study designed to assess whether cue weights are assigned according to reliabilities as per the Maximum Likelihood Estimation theoretical framework, or are otherwise assigned according to a deterministic mapping between sensory signal and depth estimation (related through a 'gain'). If cue weights are assigned according to reliabilities, then the design of this haptic training task should not elicit any changes in cue weights because there is no 'error' signal that should drive the visual system to downweight a given cue. However, if cue weights are determined according to gains as formulated by the Intrinsic Constraint model, then we should observe a decrease in texture weight with repeated exposure to this haptic training task.
 
-Below here I import and preprocess the reaching data, but do not display the code.
+The structure of the experiment was such that each participant completed 2 blocks of 108 reach-to-grasp trials on each day. Below here I import and preprocess the reaching data, but do not display the code. Note that after this step I have filtered out invalid trials, defined as a trial in which a large number of samples is missing from the data or they took too long to complete the reach.
+
+#GOAL OF THE ANALYSES
+
+In our first rendition of this experiment we observed that the rendered depth of the object modulated the planned grip aperture of the observer as the observer's hand got closer to the physical object they were actually grasping: the grip aperture was larger for larger rendered depths than for smaller rendered depths. This difference was further modulated by proximity to the completion of the grasp: as the hand got nearer to the object, the difference in grip aperture between larger and smaller rendered depths increased. However, there was no effect of the texture type on panned grip size, meaning that there was no difference in grip aperture across the different texture types.
+
+Here, we will determine how adding shading to the stimulus affected how observers completed the task. We will try to replicate the findings of the initial experiment while also seeing if there might be some differences between texture (and shading) conditions.
 
 ```{r, echo=FALSE, include=FALSE}
 #initialize the environment and set parameters
@@ -32,7 +38,7 @@ library(purrr)
 datapath <-  '/Users/james/Documents/R/TexDispHapticGrasp-Shading/data/';  
 figsavepath <-  '/Users/james/Documents/R/TexDispHapticGrasp-Shading/figures/';
 
-ids <- c('mm','eoi','rhh','baf','at','lg'); 
+ids <- c('eoi','rhh','baf','at','lg'); #'mm',
 viewing_distances <- c('-420');
 
 #define a function to compute the between-participants standard error
@@ -49,8 +55,10 @@ computeBSSEM <- function(means_vector){
   return(estimate);
 }
 
+#A note on fail codes: I believe the mapping is the following: 0 = successful trial, 1 = too many missing samples (occluded markers), 2 = missed the object, and 3 = too slow
+
 #create empty vectors to hold the data summary data for each trial
-sids <- c(); tnrs <- c(); bnrs <- c(); GAs <- c(); depths <-c();
+sids <- c(); tnrs <- c(); bnrs <- c(); GAs <- c(); depths <-c(); fcodes <- c(); timesteps <- c(); ttypes <- c();
 
 #create empty vectors to hold the data summary data for each trial
 subids <- c(); sessionnrs <- c(); trialnrs <- c(); failcodes <- c(); texturetypes <- c(); simulateddepths <- c(); touchtimes <- c(); endtimes <- c(); starttimes <- c(); MGAs <- c(); fiveGAs <- c(); tenGAs <- c(); fifteenGAs <- c();  iterator = 1; # adjustedgrips <- c(); 
@@ -66,11 +74,23 @@ for (subid in ids) {
        #for MGA, only get the max grip for the initial movement (e.g., until the grip aperture velocity first goes to 0), excluding corrections
        
        frames_occluded <- max(x$framesOccluded,na.rm=TRUE);
-       if ((frames_occluded > 20)|(max(x$handOnObj,na.rm=TRUE)==0)|(max(x$failCause,na.rm=TRUE)>0)) { #if too many samples are missing, cut this participant from analyses
+       if ((frames_occluded > 20)|(max(x$handOnObj,na.rm=TRUE)==0)|(max(x$failCause,na.rm=TRUE)>0)) { #if too many samples are missing or too slow, cut this trial from analyses
          max_GA <- NA; st <- NA; tt <- NA; et <- NA; fivemm_away_GA <- NA; tenmm_away_GA <- NA; fifteenmm_away_GA<-NA;
+         
+        #also append the individual trial data
+        fail <- max(x$failCause,na.rm=TRUE); 
+        fcodes <- append(fcodes, rep(fail,length(x$failCause))); 
+        timesteps <- append(timesteps, seq(1, length(x$subjName), 1)); #this will correspond to the number of the frame through the movement
+        ttypes <- append(ttypes, x$textureType);
+        sids <- append(sids, as.character(x$subjName)); depths <- append(depths, x$simulatedDepth);
+        tnrs <- append(tnrs, x$trialN); bnrs <- append(bnrs, x$sessionNR); GAs <- append(GAs, x$gripAperture);
          
        } else {
          #assign the total trial values to the appropriate vectors
+        fail <- max(x$failCause,na.rm=TRUE); 
+        fcodes <- append(fcodes, rep(fail,length(x$failCause))); 
+        ttypes <- append(ttypes, x$textureType);
+        timesteps <- append(timesteps, seq(1, length(x$subjName), 1)); #this will correspond to the number of the frame through the movement
         sids <- append(sids, as.character(x$subjName)); depths <- append(depths, x$simulatedDepth);
         tnrs <- append(tnrs, x$trialN); bnrs <- append(bnrs, x$sessionNR); GAs <- append(GAs, x$gripAperture);
          
@@ -121,7 +141,7 @@ for (subid in ids) {
 }
 
 #add the all trial data to a (massive) dataframe
-all_GA_data <- data.frame(subid = sids, sessionnr = bnrs, trialnr = tnrs, simulateddepth = depths, GA = GAs);
+all_GA_data <- data.frame(subid = sids, sessionnr = bnrs, texturetype = ttypes, trialnr = tnrs, simulateddepth = depths, timestep = timesteps, GA = GAs, failcodes = fcodes);
 
 #add the data vectors to a data frame for the summary data
 subject_data <- data.frame(subid = subids, sessionnr = sessionnrs, trialnr = trialnrs, failcode = failcodes, texturetype = texturetypes, simulateddepth = simulateddepths, touchtime = touchtimes, endtime = endtimes, starttime = starttimes, MGA = MGAs, fiveGA = fiveGAs, tenGA = tenGAs, fifteenGA = fifteenGAs);
@@ -129,13 +149,109 @@ subject_data <- data.frame(subid = subids, sessionnr = sessionnrs, trialnr = tri
 
 ```
 
-#1. 
+#1. PLOT THE RAW GRIP APERTURE PROFILES ACROSS VALID TRIALS
+
+A first pass analysis is to observe how the raw grip aperture evolves with time across different depths and with more experience with the task. Here, I plot for each participant the raw profiles for the trials in which there was satisfactory data (there were no fail codes etc.).
 
 ```{r}
+#for each participant, loop through the big data set and plot the raw profiles via line plots for VALID trials
+#do this for each set of blocks (1 + 2 were the first day, 3 + 4 the second day, and 5+6 the third day)
+for (subid in ids) {
+  #first, get the data only for the first day
+  first_day_data <- all_GA_data[(all_GA_data$subid==subid)&((all_GA_data$sessionnr==1)|(all_GA_data$sessionnr==2))&(all_GA_data$failcodes==0),];
+  
+  first_day_25_data <- first_day_data[first_day_data$simulateddepth==25,];
+  
+  first_day_25_plot <- ggplot(first_day_25_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 1, Depth 25"));
+  
+  print(first_day_25_plot);
+  
+   first_day_35_data <- first_day_data[first_day_data$simulateddepth==35,];
+  
+  first_day_35_plot <- ggplot(first_day_35_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 1, Depth 35"));
+  
+  print(first_day_35_plot); 
+  
+  first_day_45_data <- first_day_data[first_day_data$simulateddepth==45,];
+  
+  first_day_45_plot <- ggplot(first_day_45_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 1, Depth 45"));
+  
+  print(first_day_45_plot); 
+
+  first_day_55_data <- first_day_data[first_day_data$simulateddepth==55,];
+  
+  first_day_55_plot <- ggplot(first_day_55_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 1, Depth 55"));
+  
+  print(first_day_55_plot); 
+  
+  #second day
+  sec_day_data <- all_GA_data[(all_GA_data$subid==subid)&((all_GA_data$sessionnr==3)|(all_GA_data$sessionnr==4))&(all_GA_data$failcodes==0),];
+  
+  sec_day_25_data <- sec_day_data[sec_day_data$simulateddepth==25,];
+  
+  sec_day_25_plot <- ggplot(sec_day_25_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 2, Depth 25"));
+  
+  print(sec_day_25_plot);
+  
+   sec_day_35_data <- sec_day_data[sec_day_data$simulateddepth==35,];
+  
+  sec_day_35_plot <- ggplot(sec_day_35_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 2, Depth 35"));
+  
+  print(sec_day_35_plot); 
+  
+  sec_day_45_data <- sec_day_data[sec_day_data$simulateddepth==45,];
+  
+  sec_day_45_plot <- ggplot(sec_day_45_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 2, Depth 45"));
+  
+  print(sec_day_45_plot); 
+
+  sec_day_55_data <- sec_day_data[sec_day_data$simulateddepth==55,];
+  
+  sec_day_55_plot <- ggplot(sec_day_55_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 2, Depth 55"));
+  
+  print(sec_day_55_plot);  
+  
+  #third day
+  third_day_data <- all_GA_data[(all_GA_data$subid==subid)&((all_GA_data$sessionnr==5)|(all_GA_data$sessionnr==6))&(all_GA_data$failcodes==0),];
+  
+  third_day_25_data <- third_day_data[third_day_data$simulateddepth==25,];
+  
+  third_day_25_plot <- ggplot(third_day_25_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 3, Depth 25"));
+  
+  print(third_day_25_plot);
+  
+   third_day_35_data <- third_day_data[third_day_data$simulateddepth==35,];
+  
+  third_day_35_plot <- ggplot(third_day_35_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 3, Depth 35"));
+  
+  print(third_day_35_plot); 
+  
+  third_day_45_data <- third_day_data[third_day_data$simulateddepth==45,];
+  
+  third_day_45_plot <- ggplot(third_day_45_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 3, Depth 45"));
+  
+  print(third_day_45_plot); 
+
+  third_day_55_data <- third_day_data[third_day_data$simulateddepth==55,];
+  
+  third_day_55_plot <- ggplot(third_day_55_data, aes(x = timestep, y = GA, color = factor(texturetype))) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture")  + scale_x_continuous("Sample number", limits = c(0,100))  + geom_point(alpha = 0.5) + ggtitle(paste("Subject ",subid," , Day 3, Depth 55"));
+  
+  print(third_day_55_plot);
+}
+
+
 
 ```
 
+#2. PLOT THE DISTRIBUTION OF MEAN GRIP APERTURES FOR EACH PARTICIPANT AS A FUNCTION OF EACH TEXTURE TYPE AND LOCATION (5 MM, 10 MM, 15 MM AWAY FROM STIMULUS)
 
+
+
+# Look at the frame number when the movement starts
+
+
+
+# A measure of how the variance of the observer's grips changed across conditions.
 
 
 ```{r, echo=FALSE, include=FALSE, message=FALSE}
