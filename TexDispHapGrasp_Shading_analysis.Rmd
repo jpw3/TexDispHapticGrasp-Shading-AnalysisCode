@@ -74,7 +74,8 @@ for (subid in ids) {
        #for MGA, only get the max grip for the initial movement (e.g., until the grip aperture velocity first goes to 0), excluding corrections
        
        frames_occluded <- max(x$framesOccluded,na.rm=TRUE);
-       if ((frames_occluded > 20)|(max(x$handOnObj,na.rm=TRUE)==0)|(max(x$failCause,na.rm=TRUE)>0)) { #if too many samples are missing or too slow, cut this trial from analyses
+
+       if ((frames_occluded > 20)|(max(x$failCause,na.rm=TRUE)>0)) { #if too many samples are missing or too slow, cut this trial from analyses    
          max_GA <- NA; st <- NA; tt <- NA; et <- NA; fivemm_away_GA <- NA; tenmm_away_GA <- NA; fifteenmm_away_GA<-NA;
          
         #also append the individual trial data
@@ -100,7 +101,9 @@ for (subid in ids) {
          
          #get the GA for 15, 10 and 5 mm before the thumb touches the object
          #get the row index corresponding to the first sample were the hand is on the haptic stimulus
-         row_ <- match(1,x$handOnObj);
+         z_diff <- x$thumbZraw-x$targetZ;
+         row_ <- match(min(abs(z_diff),na.rm=TRUE), abs(z_diff));
+
          #get the thumb x,y,z at time of touch
          thmb_x <- x$thumbXraw[row_]; thmb_y <- x$thumbYraw[row_]; thmb_z <- x$thumbZraw[row_];
          dist <- sqrt((x$thumbXraw-thmb_x)^2 + (x$thumbYraw-thmb_y)^2 + (x$thumbZraw-thmb_z)^2)[1:row_];
@@ -144,8 +147,14 @@ for (subid in ids) {
 all_GA_data <- data.frame(subid = sids, sessionnr = bnrs, texturetype = ttypes, trialnr = tnrs, simulateddepth = depths, timestep = timesteps, GA = GAs, failcodes = fcodes);
 
 #add the data vectors to a data frame for the summary data
-subject_data <- data.frame(subid = subids, sessionnr = sessionnrs, trialnr = trialnrs, failcode = failcodes, texturetype = texturetypes, simulateddepth = simulateddepths, touchtime = touchtimes, endtime = endtimes, starttime = starttimes, MGA = MGAs, fiveGA = fiveGAs, tenGA = tenGAs, fifteenGA = fifteenGAs);
+subject_data_all <- data.frame(subid = subids, sessionnr = sessionnrs, trialnr = trialnrs, failcode = failcodes, texturetype = texturetypes, simulateddepth = simulateddepths, touchtime = touchtimes, endtime = endtimes, starttime = starttimes, MGA = MGAs, fiveGA = fiveGAs, tenGA = tenGAs, fifteenGA = fifteenGAs);
 
+#find the total flight time by subtracting the touch time from the start time
+subject_data_all$flighttime <- subject_data_all$touchtime - subject_data_all$starttime;
+
+#filter out trials where the fail code was greater than 0 (they did something wrong) or there was an NA across the board (meaning that either there were too many missing samples or we measured that they never actually touched the object)
+subject_data <- subject_data_all %>%
+  filter((failcode == 0) & !is.na(touchtime))
 
 ```
 
@@ -245,6 +254,219 @@ for (subid in ids) {
 
 #2. PLOT THE DISTRIBUTION OF MEAN GRIP APERTURES FOR EACH PARTICIPANT AS A FUNCTION OF EACH TEXTURE TYPE AND LOCATION (5 MM, 10 MM, 15 MM AWAY FROM STIMULUS)
 
+
+
+#3. Plot the AVERAGE GA for 15, 10 and 5 mm from the object as well as starting and flight time 
+
+#first, do the aggregated stuff
+```{r}
+#session 1
+agg_data <- subject_data %>%
+  dplyr::select(subid, texturetype, sessionnr, simulateddepth, touchtime, endtime, flighttime, starttime, MGA, fiveGA, tenGA, fifteenGA) %>%
+  mutate(texturetype = as.factor(texturetype)) %>%
+  group_by(subid, texturetype, simulateddepth, sessionnr) %>%
+  summarize(average_5GA = mean(fiveGA, na.rm = TRUE), std_5GA = sd(fiveGA, na.rm = TRUE), stderr_5GA = computeBSSEM(fiveGA), average_10GA = mean(tenGA, na.rm = TRUE), stderr_10GA = computeBSSEM(tenGA), average_15GA = mean(fifteenGA, na.rm = TRUE), std_15GA = sd(fifteenGA, na.rm = TRUE), stderr_15GA = computeBSSEM(fifteenGA), average_starttime = mean(starttime, na.rm = TRUE), stderr_starttime = computeBSSEM(starttime), average_flighttime = mean(flighttime, na.rm = TRUE), stderr_starttime = computeBSSEM(flighttime)) ; #
+
+agg <- agg_data %>%
+  group_by(texturetype, simulateddepth) %>%
+  summarize(fiveGA = mean(average_5GA, na.rm = TRUE), stderr_5GA = computeBSSEM(average_5GA),
+            fiveGAstd = mean(std_5GA, na.rm = TRUE), stderr_5GAstd = computeBSSEM(std_5GA),
+            tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
+            fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
+            fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+
+
+agg_15_plot <- ggplot(agg, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n All sessions") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
+
+print(agg_15_plot);
+
+
+agg_10_plot <- ggplot(agg, aes(x=simulateddepth, y=tenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 10 mm away from object \n All sessions") + geom_errorbar(aes(ymin = tenGA-stderr_10GA, ymax = tenGA+stderr_10GA), width = 0.75, size = 1.5)
+
+print(agg_10_plot);
+
+
+agg_5_plot <- ggplot(agg, aes(x=simulateddepth, y=fiveGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 5 mm away from object \n All sessions") + geom_errorbar(aes(ymin = fiveGA-stderr_5GA, ymax = fiveGA+stderr_5GA), width = 0.75, size = 1.5)
+
+print(agg_5_plot);
+
+#variance of grip aperture at 15 mm away  std_5GA
+agg_15std_plot <- ggplot(agg, aes(x=simulateddepth, y=fifteenGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 15 mm away from object \n All sessions") + geom_errorbar(aes(ymin = fifteenGAstd-stderr_15GAstd, ymax = fifteenGAstd+stderr_15GAstd), width = 0.75, size = 1.5)
+
+print(agg_15std_plot);
+
+
+#variance of grip aperture at 5 mm away  std_5GA
+agg_5std_plot <- ggplot(agg, aes(x=simulateddepth, y=fiveGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 5 mm away from object \n All sessions") + geom_errorbar(aes(ymin = fiveGAstd-stderr_5GAstd, ymax = fiveGAstd+stderr_5GAstd), width = 0.75, size = 1.5)
+
+print(agg_5std_plot);
+
+#starting time
+agg_starttime_plot <- ggplot(agg, aes(x=simulateddepth, y=st_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Reach initiation onset relative to stimulus onset  \n All sessions") + geom_errorbar(aes(ymin = st_time-stderr_st_time, ymax = st_time+stderr_st_time), width = 0.75, size = 1.5)
+
+print(agg_starttime_plot);
+
+
+#flight time
+agg_flighttime_plot <- ggplot(agg, aes(x=simulateddepth, y=fl_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Total time in flight (reach end - reach initiation)  \n All sessions") + geom_errorbar(aes(ymin = fl_time-stderr_fl_time, ymax = fl_time+stderr_fl_time), width = 0.75, size = 1.5)
+
+print(agg_flighttime_plot);
+
+
+```
+
+
+#Now the first session data
+```{r}
+#plot the first session data
+sess1 <- agg_data %>%
+  filter(sessionnr == 1 | sessionnr == 2) %>%
+  group_by(texturetype, simulateddepth) %>%
+  summarize(fiveGA = mean(average_5GA, na.rm = TRUE), stderr_5GA = computeBSSEM(average_5GA),
+            fiveGAstd = mean(std_5GA, na.rm = TRUE), stderr_5GAstd = computeBSSEM(std_5GA),
+            tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
+            fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
+            fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+
+sess1_15_plot <- ggplot(sess1, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 1") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
+
+print(sess1_15_plot);
+
+
+sess1_10_plot <- ggplot(sess1, aes(x=simulateddepth, y=tenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 10 mm away from object \n Session 1") + geom_errorbar(aes(ymin = tenGA-stderr_10GA, ymax = tenGA+stderr_10GA), width = 0.75, size = 1.5)
+
+print(sess1_10_plot);
+
+
+sess1_5_plot <- ggplot(sess1, aes(x=simulateddepth, y=fiveGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 5 mm away from object \n Session 1") + geom_errorbar(aes(ymin = fiveGA-stderr_5GA, ymax = fiveGA+stderr_5GA), width = 0.75, size = 1.5)
+
+print(sess1_5_plot);
+
+#variance of grip aperture at 15 mm away  std_5GA
+sess1_15std_plot <- ggplot(sess1, aes(x=simulateddepth, y=fifteenGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 15 mm away from object \n Session 1") + geom_errorbar(aes(ymin = fifteenGAstd-stderr_15GAstd, ymax = fifteenGAstd+stderr_15GAstd), width = 0.75, size = 1.5)
+
+print(sess1_15std_plot);
+
+#variance of grip aperture at 5 mm away  std_5GA
+sess1_5std_plot <- ggplot(sess1, aes(x=simulateddepth, y=fiveGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 5 mm away from object \n Session 1") + geom_errorbar(aes(ymin = fiveGAstd-stderr_5GAstd, ymax = fiveGAstd+stderr_5GAstd), width = 0.75, size = 1.5)
+
+print(sess1_5std_plot);
+
+#starting time
+sess1_starttime_plot <- ggplot(sess1, aes(x=simulateddepth, y=st_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Reach initiation onset relative to stimulus onset  \n Session 1") + geom_errorbar(aes(ymin = st_time-stderr_st_time, ymax = st_time+stderr_st_time), width = 0.75, size = 1.5)
+
+print(sess1_starttime_plot);
+
+
+#flight time
+sess1_flighttime_plot <- ggplot(sess1, aes(x=simulateddepth, y=fl_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Total time in flight (reach end - reach initiation)  \n Session 1") + geom_errorbar(aes(ymin = fl_time-stderr_fl_time, ymax = fl_time+stderr_fl_time), width = 0.75, size = 1.5)
+
+print(sess1_flighttime_plot);
+
+```
+
+#Second session data
+```{r}
+#plot the first session data
+sess2 <- agg_data %>%
+  filter(sessionnr == 3 | sessionnr == 4) %>%
+  group_by(texturetype, simulateddepth) %>%
+  summarize(fiveGA = mean(average_5GA, na.rm = TRUE), stderr_5GA = computeBSSEM(average_5GA),
+            fiveGAstd = mean(std_5GA, na.rm = TRUE), stderr_5GAstd = computeBSSEM(std_5GA),
+            tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
+            fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
+            fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+
+sess2_15_plot <- ggplot(sess2, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 2") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
+
+print(sess2_15_plot);
+
+
+sess2_10_plot <- ggplot(sess2, aes(x=simulateddepth, y=tenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 10 mm away from object \n Session 2") + geom_errorbar(aes(ymin = tenGA-stderr_10GA, ymax = tenGA+stderr_10GA), width = 0.75, size = 1.5)
+
+print(sess2_10_plot);
+
+
+sess2_5_plot <- ggplot(sess2, aes(x=simulateddepth, y=fiveGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 5 mm away from object \n Session 2") + geom_errorbar(aes(ymin = fiveGA-stderr_5GA, ymax = fiveGA+stderr_5GA), width = 0.75, size = 1.5)
+
+print(sess2_5_plot);
+
+#variance of grip aperture at 15 mm away  std_5GA
+sess2_15std_plot <- ggplot(sess2, aes(x=simulateddepth, y=fifteenGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 15 mm away from object \n Session 2") + geom_errorbar(aes(ymin = fifteenGAstd-stderr_15GAstd, ymax = fifteenGAstd+stderr_15GAstd), width = 0.75, size = 1.5)
+
+print(sess2_15std_plot);
+
+#variance of grip aperture at 5 mm away  std_5GA
+sess2_5std_plot <- ggplot(sess2, aes(x=simulateddepth, y=fiveGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 5 mm away from object \n Session 2") + geom_errorbar(aes(ymin = fiveGAstd-stderr_5GAstd, ymax = fiveGAstd+stderr_5GAstd), width = 0.75, size = 1.5)
+
+print(sess2_5std_plot);
+
+#starting time
+sess2_starttime_plot <- ggplot(sess2, aes(x=simulateddepth, y=st_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Reach initiation onset relative to stimulus onset  \n Session 2") + geom_errorbar(aes(ymin = st_time-stderr_st_time, ymax = st_time+stderr_st_time), width = 0.75, size = 1.5)
+
+print(sess2_starttime_plot);
+
+
+#flight time
+sess2_flighttime_plot <- ggplot(sess2, aes(x=simulateddepth, y=fl_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Total time in flight (reach end - reach initiation)  \n Session 2") + geom_errorbar(aes(ymin = fl_time-stderr_fl_time, ymax = fl_time+stderr_fl_time), width = 0.75, size = 1.5)
+
+print(sess2_flighttime_plot);
+
+```
+
+
+#Third session data
+```{r}
+#plot the first session data
+sess3 <- agg_data %>%
+  filter(sessionnr == 5 | sessionnr == 6) %>%
+  group_by(texturetype, simulateddepth) %>%
+  summarize(fiveGA = mean(average_5GA, na.rm = TRUE), stderr_5GA = computeBSSEM(average_5GA),
+            fiveGAstd = mean(std_5GA, na.rm = TRUE), stderr_5GAstd = computeBSSEM(std_5GA),
+            tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
+            fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
+            fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+
+sess3_15_plot <- ggplot(sess3, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 3") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
+
+print(sess3_15_plot);
+
+
+sess3_10_plot <- ggplot(sess3, aes(x=simulateddepth, y=tenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 10 mm away from object \n Session 3") + geom_errorbar(aes(ymin = tenGA-stderr_10GA, ymax = tenGA+stderr_10GA), width = 0.75, size = 1.5)
+
+print(sess3_10_plot);
+
+
+sess3_5_plot <- ggplot(sess3, aes(x=simulateddepth, y=fiveGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 5 mm away from object \n Session 3") + geom_errorbar(aes(ymin = fiveGA-stderr_5GA, ymax = fiveGA+stderr_5GA), width = 0.75, size = 1.5)
+
+print(sess3_5_plot);
+
+#variance of grip aperture at 15 mm away  std_5GA
+sess3_15std_plot <- ggplot(sess3, aes(x=simulateddepth, y=fifteenGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 15 mm away from object \n Session 3") + geom_errorbar(aes(ymin = fifteenGAstd-stderr_15GAstd, ymax = fifteenGAstd+stderr_15GAstd), width = 0.75, size = 1.5)
+
+print(sess3_15std_plot);
+
+#variance of grip aperture at 5 mm away  std_5GA
+sess3_5std_plot <- ggplot(sess3, aes(x=simulateddepth, y=fiveGAstd, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of grip aperture at 5 mm away from object \n Session 3") + geom_errorbar(aes(ymin = fiveGAstd-stderr_5GAstd, ymax = fiveGAstd+stderr_5GAstd), width = 0.75, size = 1.5)
+
+print(sess3_5std_plot);
+
+#starting time
+sess3_starttime_plot <- ggplot(sess3, aes(x=simulateddepth, y=st_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Reach initiation onset relative to stimulus onset  \n Session 3") + geom_errorbar(aes(ymin = st_time-stderr_st_time, ymax = st_time+stderr_st_time), width = 0.75, size = 1.5)
+
+print(sess3_starttime_plot);
+
+
+#flight time
+sess3_flighttime_plot <- ggplot(sess3, aes(x=simulateddepth, y=fl_time, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Reach initiation (ms)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Total time in flight (reach end - reach initiation)  \n Session 3") + geom_errorbar(aes(ymin = fl_time-stderr_fl_time, ymax = fl_time+stderr_fl_time), width = 0.75, size = 1.5)
+
+print(sess3_flighttime_plot);
+
+```
 
 
 # Look at the frame number when the movement starts
