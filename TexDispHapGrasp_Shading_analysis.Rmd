@@ -256,16 +256,16 @@ for (subid in ids) {
 
 
 
-#3. Plot the AVERAGE GA for 15, 10 and 5 mm from the object as well as starting and flight time 
+#3. Plot the AVERAGE GA for 15, 10 and 5 mm from the object as well as starting and flight time and Maximum Grip Aperture 
 
 #first, do the aggregated stuff
 ```{r}
-#session 1
+#aggregated data
 agg_data <- subject_data %>%
   dplyr::select(subid, texturetype, sessionnr, simulateddepth, touchtime, endtime, flighttime, starttime, MGA, fiveGA, tenGA, fifteenGA) %>%
   mutate(texturetype = as.factor(texturetype)) %>%
   group_by(subid, texturetype, simulateddepth, sessionnr) %>%
-  summarize(average_5GA = mean(fiveGA, na.rm = TRUE), std_5GA = sd(fiveGA, na.rm = TRUE), stderr_5GA = computeBSSEM(fiveGA), average_10GA = mean(tenGA, na.rm = TRUE), stderr_10GA = computeBSSEM(tenGA), average_15GA = mean(fifteenGA, na.rm = TRUE), std_15GA = sd(fifteenGA, na.rm = TRUE), stderr_15GA = computeBSSEM(fifteenGA), average_starttime = mean(starttime, na.rm = TRUE), stderr_starttime = computeBSSEM(starttime), average_flighttime = mean(flighttime, na.rm = TRUE), stderr_starttime = computeBSSEM(flighttime)) ; #
+  summarize(average_5GA = mean(fiveGA, na.rm = TRUE), std_5GA = sd(fiveGA, na.rm = TRUE), stderr_5GA = computeBSSEM(fiveGA), average_10GA = mean(tenGA, na.rm = TRUE), stderr_10GA = computeBSSEM(tenGA), average_15GA = mean(fifteenGA, na.rm = TRUE), std_15GA = sd(fifteenGA, na.rm = TRUE), stderr_15GA = computeBSSEM(fifteenGA), average_starttime = mean(starttime, na.rm = TRUE), stderr_starttime = computeBSSEM(starttime), average_flighttime = mean(flighttime, na.rm = TRUE), stderr_starttime = computeBSSEM(flighttime), average_MGA = mean(MGA, na.rm = TRUE), std_MGA = sd(MGA, na.rm = TRUE)) ; #
 
 agg <- agg_data %>%
   group_by(texturetype, simulateddepth) %>%
@@ -274,7 +274,7 @@ agg <- agg_data %>%
             tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
             fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
             fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
-            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime), MGA = mean(average_MGA, na.rm = TRUE), stderr_MGA = computeBSSEM(average_MGA), sd_MGA = mean(std_MGA, na.rm = TRUE), stderr_sd_MGA = computeBSSEM(std_MGA))
 
 
 agg_15_plot <- ggplot(agg, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n All sessions") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
@@ -313,7 +313,16 @@ agg_flighttime_plot <- ggplot(agg, aes(x=simulateddepth, y=fl_time, color=textur
 
 print(agg_flighttime_plot);
 
+#MGA
+agg_MGA_plot <- ggplot(agg, aes(x=simulateddepth, y=MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture",limits = c(55,95))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Maximum grip aperture (MGA) \n All sessions") + geom_errorbar(aes(ymin = MGA-stderr_MGA, ymax = MGA+stderr_MGA), width = 0.75, size = 1.5)
 
+print(agg_MGA_plot);
+
+
+#variance of MGA
+agg_MGAstd_plot <- ggplot(agg, aes(x=simulateddepth, y=sd_MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of MGA \n All sessions") + geom_errorbar(aes(ymin = sd_MGA-stderr_sd_MGA, ymax = sd_MGA+stderr_sd_MGA), width = 0.75, size = 1.5)
+
+print(agg_MGAstd_plot);
 ```
 
 
@@ -328,7 +337,7 @@ sess1 <- agg_data %>%
             tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
             fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
             fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
-            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime),MGA = mean(average_MGA, na.rm = TRUE), stderr_MGA = computeBSSEM(average_MGA), sd_MGA = mean(std_MGA, na.rm = TRUE), stderr_sd_MGA = computeBSSEM(std_MGA))
 
 sess1_15_plot <- ggplot(sess1, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 1") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
 
@@ -365,6 +374,17 @@ sess1_flighttime_plot <- ggplot(sess1, aes(x=simulateddepth, y=fl_time, color=te
 
 print(sess1_flighttime_plot);
 
+#MGA
+sess1_MGA_plot <- ggplot(sess1, aes(x=simulateddepth, y=MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture",limits = c(55,95))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Maximum grip aperture (MGA) \n Session 1") + geom_errorbar(aes(ymin = MGA-stderr_MGA, ymax = MGA+stderr_MGA), width = 0.75, size = 1.5)
+
+print(sess1_MGA_plot);
+
+
+#variance of MGA
+sess1_MGAstd_plot <- ggplot(sess1, aes(x=simulateddepth, y=sd_MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of MGA \n Session 1") + geom_errorbar(aes(ymin = sd_MGA-stderr_sd_MGA, ymax = sd_MGA+stderr_sd_MGA), width = 0.75, size = 1.5)
+
+print(sess1_MGAstd_plot);
+
 ```
 
 #Second session data
@@ -378,7 +398,7 @@ sess2 <- agg_data %>%
             tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
             fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
             fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
-            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime), MGA = mean(average_MGA, na.rm = TRUE), stderr_MGA = computeBSSEM(average_MGA), sd_MGA = mean(std_MGA, na.rm = TRUE), stderr_sd_MGA = computeBSSEM(std_MGA))
 
 sess2_15_plot <- ggplot(sess2, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 2") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
 
@@ -415,6 +435,17 @@ sess2_flighttime_plot <- ggplot(sess2, aes(x=simulateddepth, y=fl_time, color=te
 
 print(sess2_flighttime_plot);
 
+#MGA
+sess2_MGA_plot <- ggplot(sess2, aes(x=simulateddepth, y=MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture",limits = c(55,95))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Maximum grip aperture (MGA) \n Session 2") + geom_errorbar(aes(ymin = MGA-stderr_MGA, ymax = MGA+stderr_MGA), width = 0.75, size = 1.5)
+
+print(sess2_MGA_plot);
+
+
+#variance of MGA
+sess2_MGAstd_plot <- ggplot(sess2, aes(x=simulateddepth, y=sd_MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of MGA \n Session 2") + geom_errorbar(aes(ymin = sd_MGA-stderr_sd_MGA, ymax = sd_MGA+stderr_sd_MGA), width = 0.75, size = 1.5)
+
+print(sess2_MGAstd_plot);
+
 ```
 
 
@@ -429,7 +460,7 @@ sess3 <- agg_data %>%
             tenGA = mean(average_10GA, na.rm = TRUE), stderr_10GA = computeBSSEM(average_10GA),
             fifteenGA = mean(average_15GA, na.rm = TRUE), stderr_15GA = computeBSSEM(average_15GA),
             fifteenGAstd = mean(std_15GA, na.rm = TRUE), stderr_15GAstd = computeBSSEM(std_15GA),
-            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime))
+            st_time = mean(average_starttime, na.rm = TRUE), stderr_st_time = computeBSSEM(average_starttime), fl_time = mean(average_flighttime, na.rm = TRUE), stderr_fl_time = computeBSSEM(average_flighttime), MGA = mean(average_MGA, na.rm = TRUE), stderr_MGA = computeBSSEM(average_MGA), sd_MGA = mean(std_MGA, na.rm = TRUE), stderr_sd_MGA = computeBSSEM(std_MGA))
 
 sess3_15_plot <- ggplot(sess3, aes(x=simulateddepth, y=fifteenGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture", limits = c(35,80))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Grip aperture at 15 mm away from object \n Session 3") + geom_errorbar(aes(ymin = fifteenGA-stderr_15GA, ymax = fifteenGA+stderr_15GA), width = 0.75, size = 1.5)
 
@@ -466,14 +497,18 @@ sess3_flighttime_plot <- ggplot(sess3, aes(x=simulateddepth, y=fl_time, color=te
 
 print(sess3_flighttime_plot);
 
+#MGA
+sess3_MGA_plot <- ggplot(sess3, aes(x=simulateddepth, y=MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("Grip aperture",limits = c(55,95))  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Maximum grip aperture (MGA) \n Session 3") + geom_errorbar(aes(ymin = MGA-stderr_MGA, ymax = MGA+stderr_MGA), width = 0.75, size = 1.5)
+
+print(sess3_MGA_plot);
+
+
+#variance of MGA
+sess3_MGAstd_plot <- ggplot(sess3, aes(x=simulateddepth, y=sd_MGA, color=texturetype)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(size=5.0,colour = "black"), axis.ticks = element_line(size=1.4), axis.ticks.length=unit(0.2, "in")) + scale_y_continuous("S.D.(Grip aperture)")  + scale_x_continuous("Simulated Depth", limits = c(20,60), breaks = c(25,35,45,55)) + geom_point(size = 4) + ggtitle("Standard deviation of MGA \n Session 3") + geom_errorbar(aes(ymin = sd_MGA-stderr_sd_MGA, ymax = sd_MGA+stderr_sd_MGA), width = 0.75, size = 1.5)
+
+print(sess3_MGAstd_plot);
+
 ```
-
-
-# Look at the frame number when the movement starts
-
-
-
-# A measure of how the variance of the observer's grips changed across conditions.
 
 
 ```{r, echo=FALSE, include=FALSE, message=FALSE}
